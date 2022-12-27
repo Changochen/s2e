@@ -29,8 +29,12 @@ typedef struct TCGLabelPoolData {
     tcg_target_ulong data[];
 } TCGLabelPoolData;
 
-static TCGLabelPoolData *new_pool_alloc(TCGContext *s, int nlong, int rtype, tcg_insn_unit *label, intptr_t addend) {
-    TCGLabelPoolData *n = tcg_malloc(sizeof(TCGLabelPoolData) + sizeof(tcg_target_ulong) * nlong);
+
+static TCGLabelPoolData *new_pool_alloc(TCGContext *s, int nlong, int rtype,
+                                        tcg_insn_unit *label, intptr_t addend)
+{
+    TCGLabelPoolData *n = tcg_malloc(sizeof(TCGLabelPoolData)
+                                     + sizeof(tcg_target_ulong) * nlong);
 
     n->label = label;
     n->addend = addend;
@@ -39,7 +43,8 @@ static TCGLabelPoolData *new_pool_alloc(TCGContext *s, int nlong, int rtype, tcg
     return n;
 }
 
-static void new_pool_insert(TCGContext *s, TCGLabelPoolData *n) {
+static void new_pool_insert(TCGContext *s, TCGLabelPoolData *n)
+{
     TCGLabelPoolData *i, **pp;
     int nlong = n->nlong;
 
@@ -60,15 +65,19 @@ static void new_pool_insert(TCGContext *s, TCGLabelPoolData *n) {
 }
 
 /* The "usual" for generic integer code.  */
-static inline void new_pool_label(TCGContext *s, tcg_target_ulong d, int rtype, tcg_insn_unit *label, intptr_t addend) {
+static inline void new_pool_label(TCGContext *s, tcg_target_ulong d, int rtype,
+                                  tcg_insn_unit *label, intptr_t addend)
+{
     TCGLabelPoolData *n = new_pool_alloc(s, 1, rtype, label, addend);
     n->data[0] = d;
     new_pool_insert(s, n);
 }
 
 /* For v64 or v128, depending on the host.  */
-static inline void new_pool_l2(TCGContext *s, int rtype, tcg_insn_unit *label, intptr_t addend, tcg_target_ulong d0,
-                               tcg_target_ulong d1) {
+static inline void new_pool_l2(TCGContext *s, int rtype, tcg_insn_unit *label,
+                               intptr_t addend, tcg_target_ulong d0,
+                               tcg_target_ulong d1)
+{
     TCGLabelPoolData *n = new_pool_alloc(s, 2, rtype, label, addend);
     n->data[0] = d0;
     n->data[1] = d1;
@@ -76,8 +85,11 @@ static inline void new_pool_l2(TCGContext *s, int rtype, tcg_insn_unit *label, i
 }
 
 /* For v128 or v256, depending on the host.  */
-static inline void new_pool_l4(TCGContext *s, int rtype, tcg_insn_unit *label, intptr_t addend, tcg_target_ulong d0,
-                               tcg_target_ulong d1, tcg_target_ulong d2, tcg_target_ulong d3) {
+static inline void new_pool_l4(TCGContext *s, int rtype, tcg_insn_unit *label,
+                               intptr_t addend, tcg_target_ulong d0,
+                               tcg_target_ulong d1, tcg_target_ulong d2,
+                               tcg_target_ulong d3)
+{
     TCGLabelPoolData *n = new_pool_alloc(s, 4, rtype, label, addend);
     n->data[0] = d0;
     n->data[1] = d1;
@@ -87,9 +99,13 @@ static inline void new_pool_l4(TCGContext *s, int rtype, tcg_insn_unit *label, i
 }
 
 /* For v256, for 32-bit host.  */
-static inline void new_pool_l8(TCGContext *s, int rtype, tcg_insn_unit *label, intptr_t addend, tcg_target_ulong d0,
-                               tcg_target_ulong d1, tcg_target_ulong d2, tcg_target_ulong d3, tcg_target_ulong d4,
-                               tcg_target_ulong d5, tcg_target_ulong d6, tcg_target_ulong d7) {
+static inline void new_pool_l8(TCGContext *s, int rtype, tcg_insn_unit *label,
+                               intptr_t addend, tcg_target_ulong d0,
+                               tcg_target_ulong d1, tcg_target_ulong d2,
+                               tcg_target_ulong d3, tcg_target_ulong d4,
+                               tcg_target_ulong d5, tcg_target_ulong d6,
+                               tcg_target_ulong d7)
+{
     TCGLabelPoolData *n = new_pool_alloc(s, 8, rtype, label, addend);
     n->data[0] = d0;
     n->data[1] = d1;
@@ -102,37 +118,45 @@ static inline void new_pool_l8(TCGContext *s, int rtype, tcg_insn_unit *label, i
     new_pool_insert(s, n);
 }
 
-/* To be provided by cpu/tcg-target.inc.c.  */
+/* To be provided by cpu/tcg-target.c.inc.  */
 static void tcg_out_nop_fill(tcg_insn_unit *p, int count);
 
-static bool tcg_out_pool_finalize(TCGContext *s) {
+static int tcg_out_pool_finalize(TCGContext *s)
+{
     TCGLabelPoolData *p = s->pool_labels;
     TCGLabelPoolData *l = NULL;
     void *a;
 
     if (p == NULL) {
-        return true;
+        return 0;
     }
 
     /* ??? Round up to qemu_icache_linesize, but then do not round
        again when allocating the next TranslationBlock structure.  */
-    a = (void *) ROUND_UP((uintptr_t) s->code_ptr, sizeof(tcg_target_ulong) * p->nlong);
-    tcg_out_nop_fill(s->code_ptr, (tcg_insn_unit *) a - s->code_ptr);
+    a = (void *)ROUND_UP((uintptr_t)s->code_ptr,
+                         sizeof(tcg_target_ulong) * p->nlong);
+    tcg_out_nop_fill(s->code_ptr, (tcg_insn_unit *)a - s->code_ptr);
     s->data_gen_ptr = a;
 
     for (; p != NULL; p = p->next) {
         size_t size = sizeof(tcg_target_ulong) * p->nlong;
+        uintptr_t value;
+
         if (!l || l->nlong != p->nlong || memcmp(l->data, p->data, size)) {
             if (unlikely(a > s->code_gen_highwater)) {
-                return false;
+                return -1;
             }
             memcpy(a, p->data, size);
             a += size;
             l = p;
         }
-        patch_reloc(p->label, p->rtype, (intptr_t) a - size, p->addend);
+
+        value = (uintptr_t)tcg_splitwx_to_rx(a) - size;
+        if (!patch_reloc(p->label, p->rtype, value, p->addend)) {
+            return -2;
+        }
     }
 
     s->code_ptr = a;
-    return true;
+    return 0;
 }

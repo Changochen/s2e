@@ -25,7 +25,9 @@
 #include <sys/types.h>
 #endif
 
+#include <inttypes.h>
 #include <sys/time.h>
+#include <glib.h>
 
 #ifndef glue
 #define xglue(x, y)  x##y
@@ -69,5 +71,25 @@
 
 #define likely(x)   __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
+
+#define QEMU_FALLTHROUGH __attribute__((fallthrough))
+#define QEMU_PACKED __attribute__((packed))
+
+
+#ifndef G_NORETURN
+#define G_NORETURN G_GNUC_NORETURN
+#endif
+
+// TODO: move this elsewhere?
+static inline void flush_idcache_range(uintptr_t rx, uintptr_t rw, size_t len) {
+}
+
+#define LIBTCG_ERROR(X) __attribute__((error(X)))
+extern G_NORETURN void LIBTCG_ERROR("code path is reachable") qemu_build_not_reached_always(void);
+
+static inline void qemu_thread_jit_write(void) {
+}
+static inline void qemu_thread_jit_execute(void) {
+}
 
 #endif

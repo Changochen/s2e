@@ -21,52 +21,55 @@
  */
 
 typedef struct TCGLabelQemuLdst {
-    bool is_ld; /* qemu_ld: true, qemu_st: false */
-    TCGMemOpIdx oi;
-    TCGType type;                /* result type of a load */
-    TCGReg addrlo_reg;           /* reg index for low word of guest virtual addr */
-    TCGReg addrhi_reg;           /* reg index for high word of guest virtual addr */
-    TCGReg datalo_reg;           /* reg index for low word to be loaded or stored */
-    TCGReg datahi_reg;           /* reg index for high word to be loaded or stored */
-    tcg_insn_unit *raddr;        /* gen code addr of the next IR of qemu_ld/st IR */
+    bool is_ld;             /* qemu_ld: true, qemu_st: false */
+    MemOpIdx oi;
+    TCGType type;           /* result type of a load */
+    TCGReg addrlo_reg;      /* reg index for low word of guest virtual addr */
+    TCGReg addrhi_reg;      /* reg index for high word of guest virtual addr */
+    TCGReg datalo_reg;      /* reg index for low word to be loaded or stored */
+    TCGReg datahi_reg;      /* reg index for high word to be loaded or stored */
+    const tcg_insn_unit *raddr;   /* addr of the next IR of qemu_ld/st IR */
     tcg_insn_unit *label_ptr[2]; /* label pointers to be updated */
     QSIMPLEQ_ENTRY(TCGLabelQemuLdst) next;
 } TCGLabelQemuLdst;
+
 
 /*
  * Generate TB finalization at the end of block
  */
 
-static void tcg_out_qemu_ld_slow_path(TCGContext *s, TCGLabelQemuLdst *l);
-static void tcg_out_qemu_st_slow_path(TCGContext *s, TCGLabelQemuLdst *l);
+static bool tcg_out_qemu_ld_slow_path(TCGContext *s, TCGLabelQemuLdst *l);
+static bool tcg_out_qemu_st_slow_path(TCGContext *s, TCGLabelQemuLdst *l);
 
-static bool tcg_out_ldst_finalize(TCGContext *s) {
+static int tcg_out_ldst_finalize(TCGContext *s)
+{
     TCGLabelQemuLdst *lb;
 
     /* qemu_ld/st slow paths */
     QSIMPLEQ_FOREACH(lb, &s->ldst_labels, next) {
-        if (lb->is_ld) {
-            tcg_out_qemu_ld_slow_path(s, lb);
-        } else {
-            tcg_out_qemu_st_slow_path(s, lb);
+        if (lb->is_ld
+            ? !tcg_out_qemu_ld_slow_path(s, lb)
+            : !tcg_out_qemu_st_slow_path(s, lb)) {
+            return -2;
         }
 
         /* Test for (pending) buffer overflow.  The assumption is that any
            one operation beginning below the high water mark cannot overrun
            the buffer completely.  Thus we can test for overflow after
            generating code without having to check during generation.  */
-        if (unlikely((void *) s->code_ptr > s->code_gen_highwater)) {
-            return false;
+        if (unlikely((void *)s->code_ptr > s->code_gen_highwater)) {
+            return -1;
         }
     }
-    return true;
+    return 0;
 }
 
 /*
  * Allocate a new TCGLabelQemuLdst entry.
  */
 
-static inline TCGLabelQemuLdst *new_ldst_label(TCGContext *s) {
+static inline TCGLabelQemuLdst *new_ldst_label(TCGContext *s)
+{
     TCGLabelQemuLdst *l = tcg_malloc(sizeof(*l));
 
     QSIMPLEQ_INSERT_TAIL(&s->ldst_labels, l, next);
